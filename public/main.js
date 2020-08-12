@@ -23,7 +23,8 @@ $(function() {
   var peer = new Peer();
   var myPeerId;
   var peerEstablished = false;
-  var peerConnections = {};
+  var peerConnectionsTo = {};
+  var peerConnectionsFrom = {};
 
   var userNameInputEl = document.body.querySelector(".userNameInput");
   userNameInputEl.addEventListener('keydown', function(event) {
@@ -45,11 +46,6 @@ $(function() {
     document.body.querySelector(".page.chat").style.display = 'block';
     document.body.querySelector(".inputMessage").focus();
     socket.emit('login', roomId, myPeerId, userName);
-  };
-
-  socket.on('user-joined', (peerId, userName) => {
-    console.log('user joined', peerId, userName);
-    log(userName + ' joined');
 
     fetch('/room/users/' + roomId)
       .then(
@@ -62,17 +58,31 @@ $(function() {
           // Examine the text in the response
           response.json().then(function(data) {
             console.log(data);
+            data.forEach((user) => {
+              if (!peerConnectionsTo[user.peerId] && myPeerId != user.peerId) {
+                peerConnectionsTo[user.peerId] = peer.connect(user.peerId);
+                peerConnectionsTo[user.peerId].on('open', function() {
+                  peerConnectionsTo[user.peerId].send('Hello!');
+                });
+              }
+            })
           });
         }
       )
       .catch(function(err) {
         console.log('Fetch Error :-S', err);
       });
+  };
+
+  socket.on('user-joined', (peerId, userName) => {
+    console.log('user joined', peerId, userName);
+    log(userName + ' joined');
 
     if (peerId != myPeerId) {
-      peerConnections[peerId] = peer.connect(peerId);
-      peerConnections[peerId].on('open', function() {
-        peerConnections[peerId].send('Hello!');
+      peerConnectionsTo[peerId] = peer.connect(peerId);
+      peerConnectionsTo[peerId].on('open', function() {
+        peerConnectionsTo[peerId].send('Hello!');
+        console.log('Sent Hello!');
       });
     }
   });
@@ -90,10 +100,10 @@ $(function() {
   peer.on('connection', function(conn) {
     console.log('connection event ID:' + conn.peer);
 
-    if (!peerConnections[conn.peer]) {
-      peerConnections[conn.peer] = conn;
-      peerConnections[conn.peer].on('data', function(data) {
-        console.log('Received', data);
+    if (!peerConnectionsFrom[conn.peer]) {
+      peerConnectionsFrom[conn.peer] = conn;
+      peerConnectionsFrom[conn.peer].on('data', function(data) {
+        console.log('Received', data, ' from', conn.peer);
       });
     }
     
